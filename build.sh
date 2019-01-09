@@ -1,15 +1,27 @@
 #!/bin/bash
 
 LOCAL_PATH=`pwd`
-KERNEL_CONFIG=meson64_defconfig
-export ARCH=arm64
-export CROSS_COMPILE=aarch64-linux-gnu-
+BASE_PATH=$(cd "$(dirname $0)"; pwd)
+export ARCH=arm
 
-if [ "$KERNEL_SRC_DIR" = "" ]; then
-	KERNEL_SRC_DIR=/mnt/fileroot/peifu/kernel-m8
+if [ ${ARCH} = arm ]
+then
+	KERNEL_CONFIG=meson64_a32_defconfig
+	export KERNEL_A32_SUPPORT=true
+	export CROSS_COMPILE=arm-linux-gnueabihf-
+else
+	KERNEL_CONFIG=meson64_a64_defconfig
+	export CROSS_COMPILE=aarch64-linux-gnu-
 fi
-if [ "$KERNEL_OUT_DIR" = "" ]; then
-	KERNEL_OUT_DIR=/mnt/fileroot/peifu/kernel-m8/out
+
+if [ "${KERNEL_SRC_DIR}" = "" ]
+then
+	KERNEL_SRC_DIR=${BASE_PATH}/../../../../../common/
+fi
+
+if [ "${KERNEL_OUT_DIR}" = "" ]
+then
+	KERNEL_OUT_DIR=${BASE_PATH}/../../../../../common/
 fi
 
 show_help()
