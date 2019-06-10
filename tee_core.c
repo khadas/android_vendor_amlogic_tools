@@ -27,13 +27,6 @@
 #define TEE_NUM_DEVICES	32
 
 #define TEE_IOCTL_PARAM_SIZE(x) (sizeof(struct tee_param) * (x))
-
-#define u64_to_user_ptr(x) ( \
-		{ \
-		    typecheck(u64, x);      \
-			    (void __user *)(uintptr_t)x; \
-		} \
-		)
 /*
  * Unprivileged devices in the lower half range and privileged devices in
  * the upper half range.
