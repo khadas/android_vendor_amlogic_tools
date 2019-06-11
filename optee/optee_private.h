@@ -15,11 +15,13 @@
 #ifndef OPTEE_PRIVATE_H
 #define OPTEE_PRIVATE_H
 
+#include <linux/device.h>
 #include <linux/arm-smccc.h>
 #include <linux/semaphore.h>
 #include <linux/types.h>
 #include "tee_drv.h"
 #include "optee_msg.h"
+#include "../tee_private.h"
 
 #define OPTEE_MAX_ARG_SIZE	1024
 
@@ -153,6 +155,9 @@ int optee_from_msg_param(struct tee_param *params, size_t num_params,
 			 const struct optee_msg_param *msg_params);
 int optee_to_msg_param(struct optee_msg_param *msg_params, size_t num_params,
 		       const struct tee_param *params);
+
+int optee_log_init(struct tee_device *, phys_addr_t, uint32_t);
+void optee_log_exit(struct tee_device *);
 
 /*
  * Small helpers

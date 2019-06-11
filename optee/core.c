@@ -29,10 +29,13 @@
 #include "../include/linux/arm-smccc.h"
 #include "optee_private.h"
 #include "optee_smc.h"
+#include "../tee_private.h"
 
 #define DRIVER_NAME "optee"
 
 #define OPTEE_SHM_NUM_PRIV_PAGES	4
+
+#define LOGGER_SHM_SIZE             (256 * 1024)
 
 /**
  * optee_from_msg_param() - convert from OPTEE_MSG parameters to
@@ -342,7 +345,8 @@ static bool optee_msg_exchange_capabilities(optee_invoke_fn *invoke_fn,
 }
 
 static struct tee_shm_pool *
-optee_config_shm_memremap(optee_invoke_fn *invoke_fn, void **memremaped_shm)
+optee_config_shm_memremap(optee_invoke_fn *invoke_fn, void **memremaped_shm,
+		phys_addr_t *logger_shm_pa)
 {
 	union {
 		struct arm_smccc_res smccc;
@@ -357,6 +361,11 @@ optee_config_shm_memremap(optee_invoke_fn *invoke_fn, void **memremaped_shm)
 	void *va;
 	struct tee_shm_pool_mem_info priv_info;
 	struct tee_shm_pool_mem_info dmabuf_info;
+
+	if (!invoke_fn || !memremaped_shm || !logger_shm_pa) {
+		pr_err("Invalid parameters");
+		return ERR_PTR(-EINVAL);
+	}
 
 	invoke_fn(OPTEE_SMC_GET_SHM_CONFIG, 0, 0, 0, 0, 0, 0, 0, &res.smccc);
 	if (res.result.status != OPTEE_SMC_RETURN_OK) {
@@ -396,7 +405,9 @@ optee_config_shm_memremap(optee_invoke_fn *invoke_fn, void **memremaped_shm)
 	priv_info.size = OPTEE_SHM_NUM_PRIV_PAGES * PAGE_SIZE;
 	dmabuf_info.vaddr = vaddr + OPTEE_SHM_NUM_PRIV_PAGES * PAGE_SIZE;
 	dmabuf_info.paddr = paddr + OPTEE_SHM_NUM_PRIV_PAGES * PAGE_SIZE;
-	dmabuf_info.size = size - OPTEE_SHM_NUM_PRIV_PAGES * PAGE_SIZE;
+	dmabuf_info.size = size - OPTEE_SHM_NUM_PRIV_PAGES * PAGE_SIZE -
+		LOGGER_SHM_SIZE;
+	*logger_shm_pa = dmabuf_info.paddr + dmabuf_info.size;
 
 	pool = tee_shm_pool_alloc_res_mem(&priv_info, &dmabuf_info);
 	if (IS_ERR(pool)) {
@@ -431,6 +442,7 @@ static int optee_probe(struct platform_device *pdev)
 	struct tee_shm_pool *pool;
 	struct optee *optee = NULL;
 	void *memremaped_shm = NULL;
+	phys_addr_t logger_shm_pa = 0;
 	struct tee_device *teedev;
 	u32 sec_caps;
 	int rc;
@@ -461,7 +473,8 @@ static int optee_probe(struct platform_device *pdev)
 	if (!(sec_caps & OPTEE_SMC_SEC_CAP_HAVE_RESERVED_SHM))
 		return -EINVAL;
 
-	pool = optee_config_shm_memremap(invoke_fn, &memremaped_shm);
+	pool = optee_config_shm_memremap(invoke_fn, &memremaped_shm,
+			&logger_shm_pa);
 	if (IS_ERR(pool))
 		return PTR_ERR(pool);
 
@@ -494,6 +507,8 @@ static int optee_probe(struct platform_device *pdev)
 	rc = tee_device_register(optee->supp_teedev);
 	if (rc)
 		goto err;
+
+	optee_log_init(optee->teedev, logger_shm_pa, LOGGER_SHM_SIZE);
 
 	mutex_init(&optee->call_queue.mutex);
 	INIT_LIST_HEAD(&optee->call_queue.waiters);
@@ -529,6 +544,8 @@ err:
 static int optee_remove(struct platform_device *pdev)
 {
 	struct optee *optee = platform_get_drvdata(pdev);
+
+	optee_log_exit(optee->teedev);
 
 	/*
 	 * Ask OP-TEE to free all cached shared memory objects to decrease
