@@ -20,6 +20,7 @@
 #include <linux/uaccess.h>
 #include <linux/sysfs.h>
 #include <linux/kthread.h>
+#include <generated/uapi/linux/version.h>
 
 #include "optee_smc.h"
 #include "optee_private.h"
@@ -269,7 +270,11 @@ static void log_buff_output(void)
 		log_print_text(read_buff, len);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 34)
+static void log_timer_func(struct timer_list *timer)
+#else
 static void log_timer_func(unsigned long arg)
+#endif
 {
 	log_buff_output();
 	mod_timer(&optee_log_timer, jiffies + OPTEE_LOG_TIMER_INTERVAL * HZ);
@@ -306,9 +311,11 @@ int optee_log_init(struct tee_device *tee_dev, phys_addr_t shm_pa,
 	}
 
 	/* init timer */
-	init_timer(&optee_log_timer);
-	optee_log_timer.data = 0L;
-	optee_log_timer.function = log_timer_func;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 34)
+	timer_setup(&optee_log_timer, log_timer_func, 0);
+#else
+	setup_timer(&optee_log_timer, log_timer_func, 0);
+#endif
 	optee_log_timer.expires = jiffies + HZ;
 	add_timer(&optee_log_timer);
 
